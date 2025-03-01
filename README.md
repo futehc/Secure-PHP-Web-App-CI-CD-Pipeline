@@ -4,11 +4,12 @@
 This repository contains a CI/CD pipeline for a **secure PHP web application** with **comprehensive vulnerability assessment**. The pipeline integrates **static analysis, dependency scanning, dynamic analysis, container security scanning, and secrets detection** to ensure application security before deployment.
 
 ### Key Features:
-- **Static Code Analysis** (SonarQube, PHPStan, PHPCS)
+
 - **Dependency Scanning** (Composer Audit, OWASP Dependency-Check)
+- **Secrets Detection** (TruffleHog)
+- **Static Code Analysis** (SonarQube, PHPStan, PHPCS)
 - **Dynamic Analysis** (OWASP ZAP for web scanning)
 - **Container Security Scanning** (Trivy for Docker images)
-- **Secrets Detection** (TruffleHog)
 - **CI/CD Integration** (GitLab CI, Jenkins, or GitHub Actions)
 - **Slack Notifications** (Pipeline progress updates)
 - **DefectDojo Integration** (Uploads reports at each security stage)
