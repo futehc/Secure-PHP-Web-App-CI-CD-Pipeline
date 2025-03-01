@@ -1,0 +1,115 @@
+stages:
+  
+  - dependency_scanning
+  - secrets_detection
+  - security_analysis
+  - dynamic_analysis
+  - container_scanning
+  - upload_reports
+  - notify_slack
+
+variables:
+  DEFECTDOJO_URL: "https://defectdojo.acme.com/api/v2/import-scan/"
+  SLACK_WEBHOOK_URL: "https://hooks.slack.com/services/your/webhook"
+
+dependency_scanning:
+  stage: dependency_scanning
+  script:
+    - composer audit --format=json > composer_audit.json
+    - dependency-check --project "PHP Secure App" --out dependency_report.json
+  artifacts:
+    paths:
+      - composer_audit.json
+      - dependency_report.json
+  after_script:
+    - curl -X POST "$DEFECTDOJO_URL" \
+      -H "Authorization: Token $DEFECTDOJO_TOKEN" \
+      -H "accept: application/json" \
+      -H "Content-Type: multipart/form-data" \
+      -H "X-CSRFTOKEN: $XCSRFTOKEN" \
+      -F "file=@dependency_report.json;type=application/json" \
+      -F "scan_type=Dependency Check Scan"
+
+secrets_detection:
+  stage: secrets_detection
+  script:
+    - trufflehog --json . > secrets_report.json
+  artifacts:
+    paths:
+      - secrets_report.json
+  after_script:
+    - curl -X POST "$DEFECTDOJO_URL" \
+      -H "Authorization: Token $DEFECTDOJO_TOKEN" \
+      -H "accept: application/json" \
+      -H "Content-Type: multipart/form-data" \
+      -H "X-CSRFTOKEN: $XCSRFTOKEN" \
+      -F "file=@secrets_report.json;type=application/json" \
+      -F "scan_type=Secrets Detection"
+
+security_analysis:
+  stage: security_analysis
+  script:
+    - sonar-scanner -Dsonar.projectKey=php_secure_app -Dsonar.host.url=$SONARQUBE_URL -Dsonar.login=$SONARQUBE_TOKEN
+    - phpstan analyse --level=max src/
+    - phpcs --standard=PSR12 src/
+  artifacts:
+    paths:
+      - security_report.json
+  after_script:
+    - curl -X POST "$DEFECTDOJO_URL" \
+      -H "Authorization: Token $DEFECTDOJO_TOKEN" \
+      -H "accept: application/json" \
+      -H "Content-Type: multipart/form-data" \
+      -H "X-CSRFTOKEN: $XCSRFTOKEN" \
+      -F "product_type_name=" \
+      -F "active=true" \
+      -F "do_not_reactivate=false" \
+      -F "verified=true" \
+      -F "close_old_findings=false" \
+      -F "scan_date=$(date +%Y-%m-%d)" \
+      -F "file=@security_report.json;type=application/json" \
+      -F "scan_type=SonarQube Scan"
+
+dynamic_analysis:
+  stage: dynamic_analysis
+  script:
+    - zap-cli quick-scan --start-options "-config api.disablekey=true" http://your-app-url > zap_report.json
+  artifacts:
+    paths:
+      - zap_report.json
+  after_script:
+    - curl -X POST "$DEFECTDOJO_URL" \
+      -H "Authorization: Token $DEFECTDOJO_TOKEN" \
+      -H "accept: application/json" \
+      -H "Content-Type: multipart/form-data" \
+      -H "X-CSRFTOKEN: $XCSRFTOKEN" \
+      -F "file=@zap_report.json;type=application/json" \
+      -F "scan_type=ZAP Scan"
+
+container_scanning:
+  stage: container_scanning
+  script:
+    - trivy image your-docker-image:latest > trivy_report.json
+  artifacts:
+    paths:
+      - trivy_report.json
+  after_script:
+    - curl -X POST "$DEFECTDOJO_URL" \
+      -H "Authorization: Token $DEFECTDOJO_TOKEN" \
+      -H "accept: application/json" \
+      -H "Content-Type: multipart/form-data" \
+      -H "X-CSRFTOKEN: $XCSRFTOKEN" \
+      -F "file=@trivy_report.json;type=application/json" \
+      -F "scan_type=Container Scan"
+
+upload_reports:
+  stage: upload_reports
+  script:
+    - echo "All reports uploaded to DefectDojo."
+
+notify_slack:
+  stage: notify_slack
+  script:
+    - >
+      curl -X POST -H 'Content-type: application/json' --data '{"text":"Security pipeline completed. Reports uploaded to DefectDojo."}' $SLACK_WEBHOOK_URL
+
